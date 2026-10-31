@@ -13,38 +13,45 @@ function extractOriginalUrl(req) {
   const params = new URLSearchParams(incoming.search);
   let targetPath = null;
 
-  // 1. Check __path query parameter explicitly passed by vercel.json rewrite
+  // 1. Check __path query parameter passed by vercel.json rewrite
   if (params.has('__path')) {
-    const p = params.get('__path');
+    const raw = params.get('__path');
     params.delete('__path');
-    if (typeof p === 'string' && p.length > 0) {
-      targetPath = p.startsWith('/') ? p : '/' + p;
-    } else {
-      targetPath = '/';
+    if (raw && typeof raw === 'string' && !['$1', '/$1', ':path*', '/:path*'].includes(raw)) {
+      targetPath = raw.startsWith('/') ? raw : '/' + raw;
     }
   }
 
-  // 2. Check x-matched-path header set by Vercel's routing layer
-  if (!targetPath || targetPath === '/') {
-    const matched = req.headers['x-matched-path'];
-    if (matched && typeof matched === 'string' && matched !== '/api/index' && matched !== '/api/index.js') {
-      targetPath = matched;
-    }
-  }
-
-  // 3. Check other standard proxy rewrite headers
-  if (!targetPath || targetPath === '/') {
-    const rawForwarded = req.headers['x-forwarded-uri'] || req.headers['x-original-url'] || req.headers['x-rewrite-url'];
-    if (rawForwarded && typeof rawForwarded === 'string') {
-      try {
-        targetPath = new URL(rawForwarded, `http://${host}`).pathname;
-      } catch {
-        targetPath = rawForwarded.split('?')[0];
+  // 2. Check x-now-route-matches header set by Vercel's routing engine
+  if (!targetPath && req.headers['x-now-route-matches']) {
+    try {
+      const rm = new URLSearchParams(req.headers['x-now-route-matches']);
+      const m = rm.get('path') || rm.get('match') || rm.get('1') || rm.get('0');
+      if (m && !['$1', '/$1', ':path*', '/:path*'].includes(m)) {
+        targetPath = m.startsWith('/') ? m : '/' + m;
       }
+    } catch {}
+  }
+
+  // 3. Check x-matched-path header set by Vercel
+  if (!targetPath && req.headers['x-matched-path']) {
+    const mp = req.headers['x-matched-path'];
+    if (mp && typeof mp === 'string' && !['/api/index.js', '/api/index', '/api'].includes(mp)) {
+      targetPath = mp;
     }
   }
 
-  // 4. Fallback: if incoming pathname is already a real route (not /api/index.js)
+  // 4. Check x-forwarded-uri or x-original-url headers
+  if (!targetPath && req.headers['x-forwarded-uri']) {
+    try {
+      const u = new URL(req.headers['x-forwarded-uri'], `http://${host}`);
+      if (u.pathname && !['/api/index.js', '/api/index', '/api'].includes(u.pathname)) {
+        targetPath = u.pathname;
+      }
+    } catch {}
+  }
+
+  // 5. Fallback: if incoming pathname is already a real route (not /api/index.js)
   if (!targetPath) {
     if (!['/api/index.js', '/api/index', '/api'].includes(incoming.pathname)) {
       targetPath = incoming.pathname;

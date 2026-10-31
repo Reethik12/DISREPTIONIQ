@@ -73,16 +73,18 @@ async function invoke(options) {
 (async () => {
   console.log('--- Testing Vercel URL Resolution ---');
 
-  // Test 1: extractOriginalUrl with __path
-  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=login', headers: {} }), '/login');
-  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=', headers: {} }), '/');
-  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=health', headers: {} }), '/health');
-  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=css/styles.css', headers: {} }), '/css/styles.css');
-  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=api/v1/hubs&page=2&limit=10', headers: {} }), '/api/v1/hubs?page=2&limit=10');
-  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=login/', headers: {} }), '/login');
+  // Test 1: extractOriginalUrl with :path* rewrite parameter
+  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=/login', headers: {} }), '/login');
+  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=/', headers: {} }), '/');
+  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=/health', headers: {} }), '/health');
+  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=/css/styles.css', headers: {} }), '/css/styles.css');
+  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=/api/v1/hubs&page=2&limit=10', headers: {} }), '/api/v1/hubs?page=2&limit=10');
+  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=/login/', headers: {} }), '/login');
 
-  // Test 2: extractOriginalUrl with x-matched-path fallback
-  assert.equal(extractOriginalUrl({ url: '/api/index.js', headers: { 'x-matched-path': '/login' } }), '/login');
+  // Test 2: Fallback when __path is unreplaced $1 or :path*
+  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=$1', headers: { 'x-matched-path': '/login' } }), '/login');
+  assert.equal(extractOriginalUrl({ url: '/api/index.js?__path=/:path*', headers: { 'x-now-route-matches': 'path=login' } }), '/login');
+  assert.equal(extractOriginalUrl({ url: '/api/index.js', headers: { 'x-now-route-matches': '1=health' } }), '/health');
   assert.equal(extractOriginalUrl({ url: '/api/index.js?days=7', headers: { 'x-matched-path': '/api/v1/dashboard' } }), '/api/v1/dashboard?days=7');
   console.log('PASS URL resolution tests');
 
@@ -91,19 +93,20 @@ async function invoke(options) {
   // Test 3: GET /login via Vercel rewrite
   let res = await invoke({
     method: 'GET',
-    url: '/api/index.js?__path=login',
+    url: '/api/index.js?__path=/login',
     headers: { 'x-matched-path': '/login' }
   });
   assert.equal(res.statusCode, 200, 'GET /login must return 200 OK');
   assert.match(res.headers['Content-Type'], /text\/html/, 'Must return HTML content');
   assert.match(res.body, /Sign in to/i, 'Must contain login text');
   assert.doesNotMatch(res.body, /Authentication required/i, 'Must not require authentication');
+  assert.notEqual(res.headers['Location'], '/login', 'Must not redirect to itself');
   console.log('PASS GET /login serves HTML login page without authentication');
 
   // Test 4: GET / via Vercel rewrite -> redirect to /login
   res = await invoke({
     method: 'GET',
-    url: '/api/index.js?__path=',
+    url: '/api/index.js?__path=/',
     headers: { 'x-matched-path': '/' }
   });
   assert.equal(res.statusCode, 302, 'GET / must redirect');
@@ -113,7 +116,7 @@ async function invoke(options) {
   // Test 5: GET /health via Vercel rewrite
   res = await invoke({
     method: 'GET',
-    url: '/api/index.js?__path=health',
+    url: '/api/index.js?__path=/health',
     headers: { 'x-matched-path': '/health' }
   });
   assert.equal(res.statusCode, 200, 'GET /health must return 200 OK');
@@ -125,7 +128,7 @@ async function invoke(options) {
   // Test 6: GET /css/styles.css
   res = await invoke({
     method: 'GET',
-    url: '/api/index.js?__path=css/styles.css',
+    url: '/api/index.js?__path=/css/styles.css',
     headers: { 'x-matched-path': '/css/styles.css' }
   });
   assert.equal(res.statusCode, 200, 'GET /css/styles.css must return 200 OK');
@@ -136,7 +139,7 @@ async function invoke(options) {
   // Test 7: GET /js/login.js
   res = await invoke({
     method: 'GET',
-    url: '/api/index.js?__path=js/login.js',
+    url: '/api/index.js?__path=/js/login.js',
     headers: { 'x-matched-path': '/js/login.js' }
   });
   assert.equal(res.statusCode, 200, 'GET /js/login.js must return 200 OK');
@@ -147,7 +150,7 @@ async function invoke(options) {
   // Test 8: POST /api/auth/login invalid credentials
   res = await invoke({
     method: 'POST',
-    url: '/api/index.js?__path=api/auth/login',
+    url: '/api/index.js?__path=/api/auth/login',
     headers: {
       'content-type': 'application/json',
       'origin': 'https://disreptioniq.vercel.app',
@@ -164,7 +167,7 @@ async function invoke(options) {
   // Test 9: POST /api/auth/login valid demo credentials
   res = await invoke({
     method: 'POST',
-    url: '/api/index.js?__path=api/auth/login',
+    url: '/api/index.js?__path=/api/auth/login',
     headers: {
       'content-type': 'application/json',
       'origin': 'https://disreptioniq.vercel.app',
@@ -183,7 +186,7 @@ async function invoke(options) {
   // Test 10: GET /app/overview without session -> redirect to /login
   res = await invoke({
     method: 'GET',
-    url: '/api/index.js?__path=app/overview',
+    url: '/api/index.js?__path=/app/overview',
     headers: { 'x-matched-path': '/app/overview' }
   });
   assert.equal(res.statusCode, 302, 'Unauthenticated /app/overview must redirect');
@@ -193,7 +196,7 @@ async function invoke(options) {
   // Test 11: GET /customer/portal without session -> redirect to /login
   res = await invoke({
     method: 'GET',
-    url: '/api/index.js?__path=customer/portal',
+    url: '/api/index.js?__path=/customer/portal',
     headers: { 'x-matched-path': '/customer/portal' }
   });
   assert.equal(res.statusCode, 302, 'Unauthenticated /customer/portal must redirect');
@@ -203,7 +206,7 @@ async function invoke(options) {
   // Test 12: GET /api/auth/me without session -> HTTP 401
   res = await invoke({
     method: 'GET',
-    url: '/api/index.js?__path=api/auth/me',
+    url: '/api/index.js?__path=/api/auth/me',
     headers: { 'x-matched-path': '/api/auth/me' }
   });
   assert.equal(res.statusCode, 401);
