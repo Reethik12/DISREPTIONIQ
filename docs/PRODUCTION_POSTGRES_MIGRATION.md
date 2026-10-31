@@ -399,3 +399,4 @@ To transfer operational records from SQLite to PostgreSQL:
    SELECT setval('sessions_id_seq', (SELECT MAX(id) FROM sessions));
    ```
 6. Set `DATABASE_URL` in your Vercel project environment settings.
+
