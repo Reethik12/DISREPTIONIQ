@@ -352,6 +352,8 @@ function seedDatabase(){
 module.exports = { db, DB_PATH, get, all, run, audit, nowIso };
 if (process.env.DIQ_SKIP_SEED !== '1') {
   seedDatabase();
+  // Add three linked customer-facing demo orders after the base operational seed exists.
+  require('../scripts/ensure-customer-demo-orders')({ get, all, run, nowIso });
   // Existing local demo rows predate provenance tagging. Mark them synthetic once during migration.
   if(dataOriginMigrationNeeded && process.env.NODE_ENV!=='production'){
     for(const table of ['suppliers','warehouses','inventories','shipments','shipment_items','customer_orders','order_items','disruptions','recovery_plans','recovery_actions','approvals','audit_logs','webhook_events','notifications','users'])run(`UPDATE ${table} SET data_origin='synthetic' WHERE data_origin='operational'`);
