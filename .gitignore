@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment variables and secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# SQLite local database files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+instance/*.db
+instance/*.db-shm
+instance/*.db-wal
+
+# Vercel deployment cache
+.vercel/
+
+# Uploads and temporary files
+uploads/*
+!uploads/.gitkeep
+tmp/
+temp/
+coverage/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System & IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
