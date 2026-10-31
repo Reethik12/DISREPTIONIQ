@@ -77,6 +77,13 @@ function extractOriginalUrl(req) {
 }
 
 module.exports = async (req, res) => {
+  if (req.url && req.url.includes('__debug')) {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({
+      url: req.url,
+      headers: req.headers
+    }, null, 2));
+  }
   const resolvedUrl = extractOriginalUrl(req);
   req.url = resolvedUrl;
   return requestHandler(req, res);
